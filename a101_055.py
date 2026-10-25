@@ -15,6 +15,7 @@ API keys.
 
 import argparse
 import json
+import ssl
 import sys
 import time
 import unicodedata
@@ -130,6 +131,8 @@ class BinancePublic:
                 body = err.read()[:200].decode("utf-8", "replace")
                 raise ApiError(f"HTTP {err.code} on {path}: {body}") from err
             except (urllib.error.URLError, TimeoutError, ConnectionError) as err:
+                if isinstance(getattr(err, "reason", None), ssl.SSLCertVerificationError):
+                    raise FatalApiError(_cert_help(err.reason)) from err
                 log(f"Network error on {path} ({err}): retrying in {delay:.0f}s")
                 time.sleep(delay)
                 delay = min(delay * 2, 60.0)
@@ -147,6 +150,21 @@ class BinancePublic:
             wait = 61 - (time.time() % 60)
             log(f"Used weight {used_weight}/2400 this minute: pausing {wait:.0f}s")
             time.sleep(wait)
+
+
+def _cert_help(reason):
+    version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    return (
+        f"HTTPS certificate check failed ({reason.verify_message}).\n"
+        f"This Python ({sys.executable}) cannot verify Binance's certificate,\n"
+        "usually because it has no CA certificates installed. Fixes:\n"
+        f'  - Python from python.org on macOS: open "/Applications/Python {version}/'
+        'Install Certificates.command"\n'
+        "  - otherwise: pip install certifi, then\n"
+        '      export SSL_CERT_FILE="$(python3 -m certifi)"\n'
+        "If a proxy, VPN or antivirus inspects HTTPS on your network, its root\n"
+        "certificate must be trusted as well."
+    )
 
 
 def _retry_after(err, default):

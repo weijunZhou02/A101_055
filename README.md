@@ -80,8 +80,10 @@ The script reports the problem instead of guessing:
 
 - **Exit code 2, no lists:** a universe on any of the last 10 days has fewer than 80
   coins, fewer than 32 coins have a score, or ties make the BUY and SHORT lists overlap.
-- **Exit code 1:** the API is unreachable, blocked from your location (HTTP 451), or has
-  banned your IP.
+- **Exit code 1:** the API is unreachable, blocked from your location (HTTP 451), has
+  banned your IP, or the HTTPS certificate can't be verified. The last one usually means
+  your Python has no CA certificates: with Python from python.org on macOS, open
+  `/Applications/Python 3.x/Install Certificates.command` once.
 - **Warnings:** coins whose candles failed to download, coins with a missing score (and
   why), a latest candle older than yesterday (UTC), a tie at the 80th place of a universe
   (broken alphabetically), and missing funding rates.
