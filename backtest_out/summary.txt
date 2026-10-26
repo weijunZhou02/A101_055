@@ -1,0 +1,57 @@
+A101_055 backtest: Binance USDT-margined perpetuals, daily long-short
+Period: 2021-03-29 to 2026-10-24 (2036 trading days, 5.6 years)
+Entry at the next 00:00 UTC open; costs 5 bps fee + 2 bps slippage per unit traded, plus actual funding.
+
+DATA
+  Coins ever in the top-80 universe: 541; no longer trading today: 110 (kept in the test, so it is not limited to survivors)
+  Days with no lists (held cash): 0
+  Positions: 65,274; missing next-day candle: 0; missing funding: 303 (counted as 0)
+
+SIGNAL: rank IC (does a higher score mean a higher return?)
+  Next day:  mean +0.0379   t-stat +13.57   positive on 60% of days
+  Decay:     day+1 +0.0379   day+2 +0.0307   day+3 +0.0230   day+5 +0.0227   day+10 +0.0245
+
+QUINTILES: average next-day return, 5 groups of 16 coins (Q1 = highest scores = BUY list)
+  Q1:   +5.83 bps/day     +21.3% a year (simple)
+  Q2:   +1.15 bps/day      +4.2% a year (simple)
+  Q3:   -2.28 bps/day      -8.3% a year (simple)
+  Q4:   +1.48 bps/day      +5.4% a year (simple)
+  Q5:  -12.95 bps/day     -47.3% a year (simple)
+  Q1 - Q5: +18.78 bps/day with full money on each side (the portfolio puts half on each side)
+
+PORTFOLIO (half the equity long, half short)
+                            CAGR     vol  Sharpe   max DD  worst day  up days
+  Long-short, net          +5.6%    +21%    0.36   -35.6%      -4.9%      51%
+  Long-short, gross       +34.5%    +21%    1.52   -23.7%      -4.7%      53%
+  BTC buy and hold         +6.9%    +55%    0.40   -76.7%     -15.4%      50%
+  Equal-weight universe   -36.3%    +85%   -0.09   -96.2%     -37.0%      52%
+
+  Where the return comes from (average a year, simple sum, % of equity):
+    long side price moves      +8.6%
+    short side price moves    +23.2%
+    fees + slippage           -20.1%
+    funding, long side         +2.0%
+    funding, short side        -6.1%
+    net                        +7.7%
+  Turnover: 79% of equity traded a day. Break-even cost: 9.7 bps per unit traded (you assumed 7).
+
+BY YEAR (compounded; long/short side = return on that side's money)
+  year        net    gross  long side  short side  EW univ      BTC      IC  days
+  2021     +30.0%   +50.2%     +82.5%      -57.6%   +28.2%   -17.2%  +0.042   278
+  2022      +6.0%   +29.1%     -81.9%     +268.8%   -83.4%   -64.2%  +0.041   365
+  2023     +14.9%   +42.9%    +168.5%      -49.3%   +92.0%  +155.8%  +0.042   365
+  2024     -28.8%   -12.7%     -19.8%      -52.8%    -0.1%  +121.1%  +0.022   366
+  2025      +6.5%   +43.7%     -70.9%     +222.7%   -71.9%    -6.4%  +0.046   365
+  2026     +13.1%   +50.4%     +28.8%      +29.1%   -30.0%    -7.7%  +0.036   297
+
+CHECK against a101_055_2026-10-24.csv (data date 2026-10-24)
+  BUY  : 16/16 same coins (only in backtest: none; only in saved file: none)
+  SHORT: 16/16 same coins (only in backtest: none; only in saved file: none)
+  a101_055  largest difference: 4.7e-09
+  pos_rank  largest difference: 0
+  vol_rank  largest difference: 0
+  rank      largest difference: 0
+  RESULT: MATCH
+
+Saved backtest_out/equity.png
+Saved backtest_out/daily.csv, backtest_out/positions.csv, backtest_out/summary.txt

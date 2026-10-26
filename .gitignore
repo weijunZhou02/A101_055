@@ -3,3 +3,15 @@ __pycache__/
 .venv/
 # daily output files
 a101_055_*.csv
+# backtest history cache (rebuilt by get_history.py)
+data/
+# API keys
+.env
+# your own paper and demo accounts (state, ledgers, logs)
+paper/
+demo/
+# large backtest output, rebuilt by backtest.py
+backtest_out/positions.csv
+# editor and macOS files
+.idea/
+.DS_Store

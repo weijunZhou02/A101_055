@@ -11,6 +11,16 @@ A101_055 = -1 * correlation(rank((close - ts_min(low, 12)) / (ts_max(high, 12) -
 > **Research and paper trading only.** The script uses only public market-data endpoints
 > of `https://fapi.binance.com`. It never places orders and never asks for API keys.
 
+| File | What it does |
+|---|---|
+| `a101_055.py` | Today's BUY and SHORT lists (public data, no keys) |
+| `get_history.py`, `backtest.py` | Download the full history and backtest the lists ([Backtest](#backtest)) |
+| `paper_trade.py` | A simulated account on live prices; nothing is sent to Binance ([Paper trading](#paper-trading)) |
+| `demo_trade.py` | Trades the lists on a Binance Futures **demo** account, fake money, demo API key ([Demo trading](#demo-trading-binance-futures-demo-account-fake-money)) |
+| `schedule_mac.sh` | Runs `demo_trade.py` every day on a Mac ([Daily schedule](#daily-schedule-on-a-mac)) |
+
+Only `demo_trade.py` places orders, and only on Binance's demo exchange.
+
 ## Usage
 
 ```bash
@@ -91,3 +101,135 @@ The script reports the problem instead of guessing:
   that the side then totals more than 100%.
 
 Scores that agree to 12 decimal places count as a tie.
+
+## Backtest
+
+```bash
+python3 get_history.py          # downloads history into data/ (first run ~30 min, then minutes)
+python3 backtest.py             # writes backtest_out/
+python3 backtest.py --check a101_055_2026-10-24.csv   # also compare with a saved live list
+```
+
+**Data** (`get_history.py`): daily candles and funding for every crypto USDT perpetual
+Binance has listed, **delisted coins included**, from the bulk files at
+[data.binance.vision](https://github.com/binance/binance-public-data/) (monthly files, plus
+daily candle files for the current month) and `/fapi/v1/fundingRate` for funding in months
+without a bulk file. Stock, ETF and commodity contracts (`TRADIFI_PERPETUAL`) and the
+excluded bases are left out. Zips are cached in `data/raw`, so later runs only fetch new files.
+
+**Lists**: for each day *d*, `backtest.py` calls this script's own `compute_universes`,
+`compute_a101_055` and `select_lists` on the 99 completed candles the live script downloads,
+among the coins still trading at the next open. So each day gets the lists `a101_055.py`
+would have printed that night. Days where the live script would refuse (a universe under
+80, too few scores, overlapping lists) are held in cash.
+
+**Trading**: BUY the top 16 and SHORT the bottom 16 at the open of *d*+1 (00:00 UTC), half
+the equity per side and equal money per coin, held until the next open. Day return =
+half × long-side return + half × short-side return − costs + funding. Days are chained by
+multiplying.
+
+**Costs**: `--fee-bps` (default 5, taker) plus `--slippage-bps` (default 2) on all traded
+notional, including the trades that bring drifted weights back to equal. Funding is the
+actual history: a funding event is paid by the position held at that moment (the 00:00 UTC
+event belongs to the previous day's position).
+
+**Report** (`backtest_out/summary.txt`): rank IC (next day, decay over 1–10 days, by year),
+quintile returns, net and gross performance against BTC and the equal-weight universe
+(Sharpe uses 365 days), where the return comes from (long side, short side, fees, funding),
+turnover and break-even cost, and a by-year table. `daily.csv` has one row per day,
+`positions.csv` one row per coin per day, and `equity.png` is the chart.
+
+`--start` and `--end` limit the signal dates. The parameters are the stock-market
+Alpha101 values; if you start tuning them, keep a recent period untouched for a final test.
+
+## Paper trading
+
+```bash
+python3 paper_trade.py            # once a day, soon after 00:00 UTC (11:00 Sydney in summer)
+python3 paper_trade.py --status   # the account at current prices, no trading
+```
+
+A simulated account (default $10,000, `--capital` on the first run) trades the same lists
+as the backtest, with live Binance prices. Nothing is sent to Binance and no API key is
+used. Each run:
+
+1. gets the lists for the day that just closed (runs `a101_055.py` into `paper/lists/`),
+2. settles the positions at current mid prices and books the funding actually charged
+   since the last run (`/fapi/v1/fundingRate`, with Binance's mark price at each event),
+3. rebalances: half the equity per side, equal money per coin. Each order walks the live
+   order book (`/fapi/v1/depth`, 50 levels) for its size and pays the fee (`--fee-bps`,
+   default 5). Quantities are rounded to the market step size, and trades under the minimum
+   order size are skipped (closing is always allowed), as on the real exchange,
+4. compares the day's result before costs with the backtest model: the same positions'
+   00:00-to-00:00 candle returns. Runs more than 2 hours after 00:00 UTC are left out of
+   that comparison.
+
+A second run for the same lists is refused, so running it twice is harmless. If a day is
+missed, the positions are simply held until the next run.
+
+Files in `paper/`: `state.json` (balance, positions), `ledger.csv` (one row per run:
+P&L by side, funding, fees, slippage in bps, turnover, paper vs model), `trades.csv` (one
+row per simulated fill, with the mid price, fill price and book levels used).
+
+What to judge it by: the daily paper-vs-model difference and the real slippage in bps
+(the backtest assumes 2), not the profit. A few months of P&L cannot separate a Sharpe
+of about 0.4 from luck.
+
+## Demo trading (Binance Futures demo account, fake money)
+
+`demo_trade.py` trades the same lists on your Binance Futures **demo** account, so you can
+see the positions in Binance's own interface (demo.binance.com). It only ever calls
+`https://demo-fapi.binance.com`; real-account keys do not work there.
+
+One-time setup:
+1. Log in to Binance, open **Binance Demo Trading**, and create an API key on its **API Key
+   Management** page (system-generated / HMAC, with futures trading allowed).
+2. In the futures settings of the demo account, use **One-way** position mode.
+3. Save the key in `.env` (private, git-ignored, readable only by you). Either open `.env` and
+   fill in `BINANCE_DEMO_API_KEY` and `BINANCE_DEMO_API_SECRET`, or paste them hidden with:
+   ```bash
+   python3 demo_trade.py --set-keys
+   ```
+
+Daily, soon after 00:00 UTC:
+```bash
+python3 demo_trade.py              # rebalance the demo account
+python3 demo_trade.py --status     # equity and positions, no trading
+python3 demo_trade.py --dry-run    # the orders for a $10,000 empty account, no keys needed
+python3 demo_trade.py --again      # rebalance again to today's lists (after a failed order)
+python3 demo_trade.py --close-all  # close every demo position (stop)
+```
+
+The lists come from live market data, exactly as in `a101_055.py`. Orders are sized at the
+live price and sent as LIMIT IOC orders capped at `--max-slippage-bps` (default 100) from
+the live mid, because the demo order book is thinner and its prices differ from the live
+market (spreads of 50–75 bps on some coins in a check on 2026-10-26). Anything that does
+not fill inside the cap is reported. Coins that are not listed on demo are left out.
+Before opening a coin the script sets its leverage to 3x: exposure stays 1x of equity, but
+a high default leverage caps the allowed position size. Fill prices and fees come from the
+trade history (`/fapi/v1/userTrades`), and funding from `/fapi/v1/income`. On the first run
+it refuses to touch positions already on the account unless you pass `--close-existing`.
+
+Files in `demo/`: `state.json`, `ledger.csv` (equity, funding, fees, demo vs backtest model,
+average demo fill vs the live price), `orders.csv` (every order with the live mid next to
+the demo fill), `demo_trade.log` (output of scheduled runs).
+
+### Daily schedule on a Mac
+
+```bash
+./schedule_mac.sh            # install: runs demo_trade.py at 10:05, 11:05 and 12:05 local time
+./schedule_mac.sh --status   # loaded? how many runs, last exit code
+./schedule_mac.sh --remove   # remove the schedule
+```
+
+It uses launchd, the scheduler built into macOS (a file in `~/Library/LaunchAgents`). Only the
+first run after 00:00 UTC trades (11:00 in Sydney during daylight saving, 10:00 otherwise);
+the later ones see the lists are done and exit. The Mac must be on: if it is asleep, the run
+happens when it wakes (more than 2 hours after 00:00 UTC counts as late), and if it is off
+all day, that day is skipped and the positions are held. `caffeinate` keeps it awake while
+a run is going. To wake the Mac automatically every day (asks for your password; works best
+plugged in; undo with `sudo pmset repeat cancel`):
+
+```bash
+sudo pmset repeat wakeorpoweron MTWRFSU 11:04:00
+```
