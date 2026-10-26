@@ -68,7 +68,7 @@ LEDGER_COLUMNS = [
 ORDER_COLUMNS = [
     "run_time_utc", "signal_date", "symbol", "side", "reduce_only", "qty",
     "executed_qty", "limit_price", "avg_price", "live_mid", "slip_vs_live_bps",
-    "fee", "order_id", "status", "error",
+    "fee", "order_id", "status", "error", "realized_pnl",
 ]
 
 
@@ -228,16 +228,17 @@ def income_since(client, start_ms, end_ms):
 
 
 def order_fills(client, symbol, order_id):
-    """(quantity, quote amount, fee) of an order, from the trade history."""
+    """(quantity, quote amount, fee, realized P&L) of an order, from the trade history."""
     for attempt in range(3):
         trades = client.request("GET", "/fapi/v1/userTrades",
                                 {"symbol": symbol, "orderId": order_id})
         if trades:
             return (sum(float(t["qty"]) for t in trades),
                     sum(float(t["quoteQty"]) for t in trades),
-                    sum(float(t["commission"]) for t in trades))
+                    sum(float(t["commission"]) for t in trades),
+                    sum(float(t["realizedPnl"]) for t in trades))
         time.sleep(0.5 * (attempt + 1))
-    return 0.0, 0.0, 0.0
+    return 0.0, 0.0, 0.0, 0.0
 
 
 def model_return(public, targets, day):
@@ -284,6 +285,15 @@ def plan_orders(targets, positions, equity, live_mids, rules, cap):
                        "opening": current == 0, "limit": limit, "mid": mid, "rule": rule})
     orders.sort(key=lambda o: not o["reduce_only"])
     return orders, skipped, left_out
+
+
+def update_dashboard(client, folder):
+    """Rebuild demo/dashboard.html; a failure here never stops trading."""
+    try:
+        import dashboard
+        print(f"Dashboard: {dashboard.build(client, folder)}")
+    except Exception as err:
+        print(f"WARNING: dashboard not updated: {err}")
 
 
 def main(argv=None):
@@ -374,6 +384,7 @@ def main(argv=None):
         if state and state["last_signal"] == signal and not args.again:
             print(f"Already rebalanced to the {signal} lists. Demo equity ${equity:,.2f}. "
                   "Next run after 00:00 UTC.")
+            update_dashboard(client, folder)
             return 0
         if state is None and positions and not args.close_existing and not args.dry_run:
             print(f"ERROR: the demo account already has {len(positions)} positions "
@@ -382,7 +393,7 @@ def main(argv=None):
             return 1
         lists_path = lists_dir / f"a101_055_{signal}.csv"
         if not lists_path.exists():
-            code = live.main(["--outdir", str(lists_dir)])
+            code = live.main(["--outdir", str(lists_dir), "--all"])
             if code != 0 or not lists_path.exists():
                 print(f"ERROR: no lists for {signal}; nothing traded.", file=sys.stderr)
                 return code or 2
@@ -426,7 +437,7 @@ def main(argv=None):
                "side": o["side"], "reduce_only": int(o["reduce_only"]), "qty": o["qty"],
                "executed_qty": 0.0, "limit_price": o["limit"], "avg_price": "",
                "live_mid": o["mid"], "slip_vs_live_bps": "", "fee": "", "order_id": "",
-               "status": "", "error": ""}
+               "status": "", "error": "", "realized_pnl": ""}
         try:
             if o["opening"]:
                 try:
@@ -437,8 +448,8 @@ def main(argv=None):
             r = client.request("POST", "/fapi/v1/order", params)
             row.update(order_id=r.get("orderId", ""), status=r.get("status", ""))
             # The order reply may not carry fill prices; the trade history does.
-            executed, quote, fee = order_fills(client, o["symbol"], r["orderId"])
-            row.update(executed_qty=executed, fee=fee)
+            executed, quote, fee, realized = order_fills(client, o["symbol"], r["orderId"])
+            row.update(executed_qty=executed, fee=fee, realized_pnl=realized)
             if executed > 0:
                 avg = quote / executed
                 slip = (avg / o["mid"] - 1) * 1e4 * (1 if o["side"] == "BUY" else -1)
@@ -508,6 +519,7 @@ def main(argv=None):
           f"{equity_after / state['start_equity'] - 1:+.2%} since {state['created']})")
     if unfilled:
         print(f"  See {orders_path} for the orders that did not fill completely.")
+    update_dashboard(client, folder)
     return 0
 
 

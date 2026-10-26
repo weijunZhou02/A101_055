@@ -18,6 +18,7 @@ A101_055 = -1 * correlation(rank((close - ts_min(low, 12)) / (ts_max(high, 12) -
 | `paper_trade.py` | A simulated account on live prices; nothing is sent to Binance ([Paper trading](#paper-trading)) |
 | `demo_trade.py` | Trades the lists on a Binance Futures **demo** account, fake money, demo API key ([Demo trading](#demo-trading-binance-futures-demo-account-fake-money)) |
 | `schedule_mac.sh` | Runs `demo_trade.py` every day on a Mac ([Daily schedule](#daily-schedule-on-a-mac)) |
+| `dashboard.py` | Builds `demo/dashboard.html`: money line, long vs short profit, holdings and daily lists ([Dashboard](#dashboard)) |
 
 Only `demo_trade.py` places orders, and only on Binance's demo exchange.
 
@@ -27,6 +28,7 @@ Only `demo_trade.py` places orders, and only on Binance's demo exchange.
 pip install -r requirements.txt
 python3 a101_055.py                 # writes a101_055_<date>.csv in the current folder
 python3 a101_055.py --outdir runs   # or in another folder
+python3 a101_055.py --all           # also save all 80 ranked coins to a101_055_<date>_all.csv
 ```
 
 Python 3.9+. A run downloads about 520 daily-candle series and takes about 2 minutes.
@@ -213,6 +215,39 @@ it refuses to touch positions already on the account unless you pass `--close-ex
 Files in `demo/`: `state.json`, `ledger.csv` (equity, funding, fees, demo vs backtest model,
 average demo fill vs the live price), `orders.csv` (every order with the live mid next to
 the demo fill), `demo_trade.log` (output of scheduled runs).
+
+### Dashboard
+
+`demo/dashboard.html` shows the demo account:
+
+- **Tiles:** equity, return since the start, open profit or loss, number of holdings.
+- **Money line** (button **Account**): account value over time next to the same starting
+  money held in BTC.
+- **Long vs short:** each side's price profit since the start (realized from closed or
+  reduced positions plus open profit), before fees and funding. Realized profit comes from
+  the `realized_pnl` of each fill in `orders.csv`: a SELL reduces a long, a BUY a short.
+- **What I hold** (**Show holdings**): each coin's side, quantity, entry price (**my price**,
+  as Binance reports it), price now, value and profit or loss. Click a column to sort.
+- **Daily lists** (**Show daily lists**): for each run, all 80 ranked coins with the score,
+  the BUY / SHORT tag, price position and volume rank, and the rank change since the day
+  before (▲ up, ▼ down, *new* = not in the previous universe), plus which coins entered or
+  left each list. Pick the day from the menu; filter to the 16 BUY or 16 SHORT coins. It
+  reads the `a101_055_<date>_all.csv` files that `demo_trade.py` saves in `demo/lists/`.
+
+The buttons at the top jump to a section. Adding `#sides`, `#holdings` or `#lists` to the
+address opens that view straight away.
+
+`demo_trade.py` rebuilds the page after every run, including the scheduled runs that don't
+trade, so the money line gets three points a day. To rebuild it yourself:
+
+```bash
+python3 dashboard.py && open demo/dashboard.html
+```
+
+Building the page uses your demo key (on your Mac). The page itself holds no keys: while it
+is open it fetches public mark prices from `demo-fapi.binance.com` every minute, so prices,
+profit and equity stay current until the next rebuild. Positions change only when
+`demo_trade.py` runs, and that rebuilds the page.
 
 ### Daily schedule on a Mac
 

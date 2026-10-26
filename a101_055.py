@@ -401,6 +401,8 @@ def main(argv=None):
                     "(research and paper trading only; public data, no orders).")
     parser.add_argument("--outdir", default=".",
                         help="folder for a101_055_<date>.csv (default: current folder)")
+    parser.add_argument("--all", action="store_true",
+                        help="also save all universe coins to a101_055_<date>_all.csv")
     args = parser.parse_args(argv)
     outdir = Path(args.outdir)
 
@@ -497,6 +499,19 @@ def main(argv=None):
     path = outdir / f"a101_055_{today:%Y-%m-%d}.csv"
     out.to_csv(path, index=False, float_format="%.8g")
     print(f"\nSaved {path}")
+
+    if args.all:
+        full = table.rename_axis("symbol").reset_index()
+        full["side"] = full["symbol"].map({**{s: "BUY" for s in buy},
+                                           **{s: "SHORT" for s in short}}).fillna("")
+        full["date"] = f"{today:%Y-%m-%d}"
+        full["adv30_usdt_millions"] = full["adv30_usdt"] / 1e6
+        full = full.sort_values(["rank", "symbol"])[[
+            "date", "rank", "symbol", "side", "a101_055", "pos_rank", "vol_rank",
+            "adv30_usdt_millions"]]
+        all_path = outdir / f"a101_055_{today:%Y-%m-%d}_all.csv"
+        full.to_csv(all_path, index=False, float_format="%.8g")
+        print(f"Saved {all_path} (all {len(full)} universe coins)")
     return 0
 
 
